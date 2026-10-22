@@ -1,0 +1,18 @@
+{
+  "name": "pi-usage-bar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Universal usage and quota status bar for Pi",
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "latest"
+  }
+}
