@@ -32,6 +32,7 @@ import {
 } from "./rate-limits.ts";
 import { fetchXaiBilling, readXaiOauthAccess } from "./xai-quota.ts";
 
+const IDLE_REFRESH_MS = 60_000;
 export const DEFAULT_STATUS_KEY = "plan-usage-limit";
 
 export {
@@ -158,6 +159,8 @@ export function registerQuotaDisplaySupport(
 	let billingAttemptAt = 0;
 	let billingOk = false;
 	let billingInflight: Promise<void> | undefined;
+	let lastStatusText: string | undefined | null = null; // null = nothing sent yet
+	let idleTimer: ReturnType<typeof setInterval> | undefined;
 
 	const clearState = (): void => {
 		billingGeneration += 1;
@@ -218,7 +221,10 @@ export function registerQuotaDisplaySupport(
 
 	const setStatus = (ctx: ExtensionContext, text: string | undefined): void => {
 		if (!ctx.hasUI) return;
-		ctx.ui.setStatus(statusKey, text);
+		if (text !== lastStatusText) {
+			lastStatusText = text;
+			ctx.ui.setStatus(statusKey, text);
+		}
 		onStatusChange?.(ctx);
 	};
 
@@ -424,13 +430,29 @@ export function registerQuotaDisplaySupport(
 		},
 	});
 
+	const stopIdleTimer = (): void => {
+		if (idleTimer) clearInterval(idleTimer);
+		idleTimer = undefined;
+	};
+	// While idle, recompute countdowns from the cached snapshot (no network).
+	const startIdleTimer = (): void => {
+		stopIdleTimer();
+		idleTimer = setInterval(() => {
+			const ctx = activeContext;
+			if (ctx?.isIdle()) renderStatus(ctx);
+		}, IDLE_REFRESH_MS);
+		idleTimer.unref?.();
+	};
+
 	pi.on("session_start", (_event, ctx) => {
 		clearState();
+		startIdleTimer();
 		activeContext = isSupportedQuotaContext(ctx) ? ctx : undefined;
 		setStatus(ctx, undefined);
 		return refreshXaiBilling(ctx, false);
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
+		stopIdleTimer();
 		billingGeneration += 1;
 		activeContext = undefined;
 		setStatus(ctx, undefined);
