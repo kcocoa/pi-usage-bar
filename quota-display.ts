@@ -32,7 +32,7 @@ import {
 } from "./rate-limits.ts";
 import { fetchXaiBilling, readXaiOauthAccess } from "./xai-quota.ts";
 
-export const DEFAULT_STATUS_KEY = "usage-bar";
+export const DEFAULT_STATUS_KEY = "plan-usage-limit";
 
 export {
 	formatLocalDateTime,
@@ -57,7 +57,7 @@ function debugEnabled(): boolean {
 
 function debugNotify(ctx: ExtensionContext | undefined, message: string): void {
 	if (!debugEnabled()) return;
-	const line = `[quota-debug] ${formatLocalStamp(new Date(), LOCAL_TIME_ZONE, true)} ${message}`;
+	const line = `[usage-limit-debug] ${formatLocalStamp(new Date(), LOCAL_TIME_ZONE, true)} ${message}`;
 	if (ctx?.hasUI) ctx.ui.notify(line, "info");
 	else console.error(line);
 }
@@ -319,13 +319,13 @@ export function registerQuotaDisplaySupport(
 	const formatDetails = (providerName: string): string => {
 		if (snapshots.size === 0 && !promoMessage && !rateLimitReachedType) {
 			if (providerName === "xAI") {
-				return "No xAI quota data yet. Weekly SuperGrok quota needs a subscription login (/login xai).";
+				return "No xAI usage limit data yet. Weekly SuperGrok usage limit needs a subscription login (/login xai).";
 			}
-			return `No ${providerName} quota data has been observed in response headers or SSE body events yet.`;
+			return `No ${providerName} usage limit data has been observed in response headers or SSE body events yet.`;
 		}
 
 		const lines = [
-			`${providerName} quota${lastUpdatedAt ? ` (updated ${formatLocalDateTime(lastUpdatedAt)})` : ""}`,
+			`${providerName} usage limit${lastUpdatedAt ? ` (updated ${formatLocalDateTime(lastUpdatedAt)})` : ""}`,
 		];
 		const subscription = formatSubscriptionType(planType);
 		if (subscription) lines.push(`Plan: ${subscription}`);
@@ -355,9 +355,9 @@ export function registerQuotaDisplaySupport(
 		return lines.join("\n");
 	};
 
-	// Universal /quota command
-	pi.registerCommand("quota", {
-		description: "Show model quota and usage (Anthropic, xAI, Codex)",
+	// Universal /usage-limit command
+	pi.registerCommand("usage-limit", {
+		description: "Show model usage limits (Anthropic, xAI, Codex)",
 		handler: async (args, ctx) => {
 			const target = args?.trim().toLowerCase();
 			if (target === "xai" || (!target && isXai(ctx))) {
@@ -394,7 +394,7 @@ export function registerQuotaDisplaySupport(
 
 	// Legacy aliases
 	pi.registerCommand("codex:usage", {
-		description: "Show the latest Codex quota snapshot",
+		description: "Show the latest Codex usage limit snapshot",
 		handler: async (_args, ctx) => {
 			ctx.ui.notify(
 				formatDetails("Codex"),
@@ -404,7 +404,7 @@ export function registerQuotaDisplaySupport(
 	});
 
 	pi.registerCommand("anthropic:usage", {
-		description: "Show the latest Anthropic quota snapshot",
+		description: "Show the latest Anthropic usage limit snapshot",
 		handler: async (_args, ctx) => {
 			ctx.ui.notify(
 				formatDetails("Anthropic"),
@@ -414,7 +414,7 @@ export function registerQuotaDisplaySupport(
 	});
 
 	pi.registerCommand("xai:usage", {
-		description: "Show the latest xAI quota snapshot",
+		description: "Show the latest xAI usage limit snapshot",
 		handler: async (_args, ctx) => {
 			if (isXai(ctx)) await refreshXaiBilling(ctx, true);
 			ctx.ui.notify(

@@ -505,11 +505,11 @@ describe("Universal quota and usage display", () => {
 		await harness.commands.get("codex:usage")?.handler("", official.ctx);
 
 		expect(official.notify.mock.calls.at(-1)?.[0]).toContain(
-			"No Codex quota data",
+			"No Codex usage limit data",
 		);
 	});
 
-	it("registers a detailed usage command and unified /quota command", async () => {
+	it("registers a detailed usage command and unified /usage-limit command", async () => {
 		const harness = createHarness();
 		registerQuotaDisplaySupport(harness.pi);
 		const { ctx, notify } = createContext();
@@ -530,7 +530,7 @@ describe("Universal quota and usage display", () => {
 		);
 
 		// Test unified /quota
-		await harness.commands.get("quota")?.handler("", ctx);
+		await harness.commands.get("usage-limit")?.handler("", ctx);
 		expect(notify.mock.calls.at(-1)?.[0]).toContain(
 			"Primary (5h): 20% used, 80% left",
 		);
@@ -649,7 +649,7 @@ describe("Universal quota and usage display", () => {
 		);
 		await harness.commands.get("anthropic:usage")?.handler("", ctx);
 
-		expect(notify.mock.calls.at(-1)?.[0]).toContain("Anthropic quota");
+		expect(notify.mock.calls.at(-1)?.[0]).toContain("Anthropic usage limit");
 		expect(notify.mock.calls.at(-1)?.[0]).toContain(
 			"Primary (5h): 20% used, 80% left",
 		);
@@ -689,7 +689,7 @@ describe("Universal quota and usage display", () => {
 		]);
 
 		await harness.commands.get("xai:usage")?.handler("", ctx);
-		expect(notify.mock.calls.at(-1)?.[0]).toContain("xAI quota");
+		expect(notify.mock.calls.at(-1)?.[0]).toContain("xAI usage limit");
 		expect(notify.mock.calls.at(-1)?.[0]).toContain("Plan: supergrok");
 		expect(notify.mock.calls.at(-1)?.[0]).toContain("Primary (7d): 1% used, 99% left");
 		expect(notify.mock.calls.at(-1)?.[0]).toContain("balance=14.46");

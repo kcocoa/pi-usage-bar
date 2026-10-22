@@ -125,7 +125,7 @@ export function formatResetClock(
 /**
  * Universal reset time formatter shared by all providers:
  *
- * For low remaining quota (<10%) or upcoming reset (<1h), display absolute clock HH:MM.
+ * For low remaining usage limit (<10%) or upcoming reset (<1h), display absolute clock HH:MM.
  * If expired, display "now". Otherwise display relative countdown (e.g. "3h44m").
  */
 export function formatWindowReset(

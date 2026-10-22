@@ -4,7 +4,7 @@ import type {
 	RateLimitWindow,
 } from "./rate-limits.ts";
 
-/** Grok CLI billing proxy. Weekly SuperGrok quota is not on inference headers. */
+/** Grok CLI billing proxy. Weekly SuperGrok usage limit is not on inference headers. */
 export const XAI_BILLING_URL =
 	"https://cli-chat-proxy.grok.com/v1/billing?format=credits";
 
