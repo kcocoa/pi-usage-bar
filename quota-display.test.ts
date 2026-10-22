@@ -89,6 +89,12 @@ describe("Universal quota and usage display", () => {
 				now,
 			),
 		).toBe("3h44m");
+		// A zero unit must not be skipped to show seconds ("2h1s").
+		expect(
+			formatResetCountdown((now + (2 * 3_600 + 1) * 1000) / 1000, now),
+		).toBe("2h");
+		expect(formatResetCountdown((now + 90 * 1000) / 1000, now)).toBe("1m");
+		expect(formatResetCountdown((now + 30 * 1000) / 1000, now)).toBe("30s");
 	});
 
 	it("formats reset times in the requested timezone with its offset", () => {

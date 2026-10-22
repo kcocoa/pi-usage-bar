@@ -85,19 +85,26 @@ export function formatResetCountdown(
 		return undefined;
 	let remaining = Math.ceil(resetsAt - nowMs / 1000);
 	if (remaining <= 0) return "now";
-	const parts: string[] = [];
-	for (const [suffix, seconds] of [
+	// Two adjacent units, e.g. 2h0m1s -> "2h" (never skip a zero unit to reach
+	// a smaller one, and show seconds only when under a minute).
+	const units = [
 		["d", 86_400],
 		["h", 3_600],
 		["m", 60],
 		["s", 1],
-	] as const) {
+	] as const;
+	const values = units.map(([, seconds]) => {
 		const value = Math.floor(remaining / seconds);
 		remaining %= seconds;
-		if (value > 0) parts.push(`${value}${suffix}`);
-		if (parts.length === 2) break;
+		return value;
+	});
+	const first = values.findIndex((value) => value > 0);
+	let text = `${values[first]}${units[first][0]}`;
+	const next = first + 1;
+	if (next < units.length - 1 && values[next] > 0) {
+		text += `${values[next]}${units[next][0]}`;
 	}
-	return parts.length > 0 ? parts.join("") : "now";
+	return text;
 }
 
 /**
