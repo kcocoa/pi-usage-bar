@@ -31,4 +31,10 @@ Displays remaining quota percentages, local reset countdowns (or absolute clock 
 
 ## Installation
 
-Add this extension directory to your Pi configuration (or clone into `~/.pi/agent/extensions/pi-usage-bar`).
+Clone into your Pi extensions directory:
+
+```bash
+git clone git@github.com:kcocoa/pi-usage-bar.git ~/.pi/agent/extensions/pi-usage-bar
+```
+
+For custom OpenAI Responses gateways, fast service tiers, or cyber warnings, pair this with [`pi-codex-gateway`](https://github.com/kcocoa/pi-codex-gateway).
