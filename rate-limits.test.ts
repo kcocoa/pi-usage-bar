@@ -238,4 +238,60 @@ describe("Codex rate limits", () => {
 		});
 		expect(update?.snapshots[0].primary).toBeUndefined();
 	});
+
+	it("parses Anthropic unified low-priority dedicated budget headers", () => {
+		const update = parseRateLimitHeaders({
+			"anthropic-ratelimit-unified-5h-utilization": "0.1",
+			"anthropic-ratelimit-unified-5h-reset": "1788030000",
+			"anthropic-ratelimit-unified-7d-utilization": "0.4",
+			"anthropic-ratelimit-unified-7d-reset": "1788548400",
+			"anthropic-ratelimit-unified-slow-budget-utilization": "0.25",
+			"anthropic-ratelimit-unified-slow-budget-reset": "1788548400",
+			"anthropic-ratelimit-unified-slow-status": "active",
+			"anthropic-ratelimit-unified-slow-offer": "treatment",
+			"anthropic-ratelimit-unified-slow-retry-after": "20",
+			"anthropic-ratelimit-unified-slow-max-wait": "1200",
+			"anthropic-ratelimit-unified-status": "allowed",
+		});
+
+		expect(update?.snapshots[0].lowPriority).toMatchObject({
+			usedPercent: 25,
+			resetsAt: 1788548400,
+			windowMinutes: 10_080,
+			label: "low",
+			status: "active",
+			offer: "treatment",
+			retryAfter: 20,
+			maxWait: 1200,
+		});
+	});
+
+	it("falls back to 7d-reset for low-priority budget when slow-budget-reset is missing", () => {
+		const update = parseRateLimitHeaders({
+			"anthropic-ratelimit-unified-slow-budget-utilization": "0.5",
+			"anthropic-ratelimit-unified-7d-reset": "1788548400",
+			"anthropic-ratelimit-unified-status": "allowed",
+		});
+
+		expect(update?.snapshots[0].lowPriority).toMatchObject({
+			usedPercent: 50,
+			resetsAt: 1788548400,
+			label: "low",
+		});
+	});
+
+	it("treats budget_exhausted status as 100% used when utilization header is missing", () => {
+		const update = parseRateLimitHeaders({
+			"anthropic-ratelimit-unified-slow-status": "budget_exhausted",
+			"anthropic-ratelimit-unified-7d-reset": "1788548400",
+			"anthropic-ratelimit-unified-status": "rejected",
+		});
+
+		expect(update?.snapshots[0].lowPriority).toMatchObject({
+			usedPercent: 100,
+			resetsAt: 1788548400,
+			status: "budget_exhausted",
+			label: "low",
+		});
+	});
 });

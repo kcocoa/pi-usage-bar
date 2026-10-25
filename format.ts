@@ -28,6 +28,7 @@ export function formatWindowLabel(
 	window: RateLimitWindow,
 	fallback: string,
 ): string {
+	if (window.label) return window.label;
 	const minutes = window.windowMinutes;
 	if (!minutes || minutes <= 0) return fallback;
 	if (minutes % 1_440 === 0) return `${minutes / 1_440}d`;

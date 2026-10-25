@@ -7,7 +7,7 @@ Displays remaining usage limit percentages, local reset countdowns (or absolute 
 ## Features
 
 - **Multi-Provider Support**:
-  - **Anthropic**: Unified 5h and 7d utilization, remaining percentages, reset countdowns, and rate-limit rejection state (from OAuth response headers).
+  - **Anthropic**: Unified 5h, 7d, and low-priority dedicated allowance utilization, remaining percentages, reset countdowns, and rate-limit rejection state (from OAuth response headers).
   - **xAI**: SuperGrok / X Premium weekly credit usage and reset countdowns (via Grok CLI billing proxy, cached for 5 minutes).
   - **Codex / OpenAI Gateways**: 5h/7d windows, custom metered limits, plan tiers (`plus`, `pro5x`, `pro20x`, `business`), and credits balances.
 - **Shared Reset Clock & Countdown**:
@@ -25,6 +25,7 @@ Displays remaining usage limit percentages, local reset countdowns (or absolute 
 
 - Codex Pro 5x: `pro5x 5h:82%↺3h44m 7d:54%↺5d17h`
 - Anthropic: `5h:97%↺4h47m 7d:77%↺3d20h`
+- Anthropic (with low priority): `5h:97%↺4h47m 7d:77%↺3d20h low:85%↺5d17h`
 - xAI SuperGrok: `supergrok 7d:99%↺5d12h`
 - Low 5h usage limit with clock reset: `pro5x 5h:8%↺14:30`
 - Reset passed: `5h:?↺now`

@@ -700,4 +700,45 @@ describe("Universal quota and usage display", () => {
 		expect(notify.mock.calls.at(-1)?.[0]).toContain("Primary (7d): 1% used, 99% left");
 		expect(notify.mock.calls.at(-1)?.[0]).toContain("balance=14.46");
 	});
+
+	it("renders low-priority allowance in footer and details when Anthropic headers are observed", async () => {
+		const harness = createHarness();
+		registerQuotaDisplaySupport(harness.pi);
+		const { ctx, setStatus, notify } = createContext("anthropic");
+		const nowSec = Math.floor(Date.now() / 1000);
+		await harness.emit(
+			"after_provider_response",
+			{
+				type: "after_provider_response",
+				status: 200,
+				headers: {
+					"anthropic-ratelimit-unified-5h-utilization": "0.20",
+					"anthropic-ratelimit-unified-5h-reset": String(nowSec + 18000),
+					"anthropic-ratelimit-unified-7d-utilization": "0.40",
+					"anthropic-ratelimit-unified-7d-reset": String(nowSec + 400000),
+					"anthropic-ratelimit-unified-slow-budget-utilization": "0.15",
+					"anthropic-ratelimit-unified-slow-budget-reset": String(nowSec + 400000),
+					"anthropic-ratelimit-unified-slow-status": "active",
+					"anthropic-ratelimit-unified-slow-offer": "treatment",
+					"anthropic-ratelimit-unified-status": "allowed",
+				},
+			},
+			ctx,
+		);
+
+		const footer = setStatus.mock.calls.at(-1)?.[1];
+		expect(footer).toContain("5h:80%");
+		expect(footer).toContain("7d:60%");
+		expect(footer).toContain("low:85%");
+
+		await harness.commands.get("anthropic:usage")?.handler("", ctx);
+		const details = notify.mock.calls.at(-1)?.[0];
+		expect(details).toContain("Anthropic usage limit");
+		expect(details).toContain("Primary (5h): 20% used, 80% left");
+		expect(details).toContain("Secondary (7d): 40% used, 60% left");
+		expect(details).toContain(
+			"Low priority (low): 15% used, 85% left",
+		);
+		expect(details).toContain("[status: active, offer: treatment]");
+	});
 });

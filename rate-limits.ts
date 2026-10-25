@@ -12,6 +12,14 @@ export interface RateLimitWindow {
 	usedPercent: number;
 	windowMinutes?: number;
 	resetsAt?: number;
+	label?: string;
+}
+
+export interface LowPriorityWindow extends RateLimitWindow {
+	status?: string;
+	offer?: string;
+	retryAfter?: number;
+	maxWait?: number;
 }
 
 export interface CreditsSnapshot {
@@ -25,6 +33,7 @@ export interface RateLimitSnapshot {
 	limitName?: string;
 	primary?: RateLimitWindow;
 	secondary?: RateLimitWindow;
+	lowPriority?: LowPriorityWindow;
 	credits?: CreditsSnapshot;
 	planType?: string;
 }
@@ -148,6 +157,7 @@ function hasSnapshotData(snapshot: RateLimitSnapshot): boolean {
 	return (
 		snapshot.primary !== undefined ||
 		snapshot.secondary !== undefined ||
+		snapshot.lowPriority !== undefined ||
 		snapshot.credits !== undefined ||
 		snapshot.limitName !== undefined ||
 		snapshot.planType !== undefined
@@ -175,13 +185,62 @@ function parseAnthropicWindow(
 	};
 }
 
+function parseAnthropicLowPriority(
+	headers: Map<string, string>,
+): LowPriorityWindow | undefined {
+	const utilization = finiteNumber(
+		headers.get(`${ANTHROPIC_UNIFIED_PREFIX}slow-budget-utilization`),
+	);
+	const status = trimmed(
+		headers.get(`${ANTHROPIC_UNIFIED_PREFIX}slow-status`),
+	);
+	const offer = trimmed(
+		headers.get(`${ANTHROPIC_UNIFIED_PREFIX}slow-offer`),
+	);
+	const retryAfter = finiteNumber(
+		headers.get(`${ANTHROPIC_UNIFIED_PREFIX}slow-retry-after`),
+	);
+	const maxWait = finiteNumber(
+		headers.get(`${ANTHROPIC_UNIFIED_PREFIX}slow-max-wait`),
+	);
+
+	if (utilization === undefined && status !== "budget_exhausted") {
+		return undefined;
+	}
+
+	const usedPercent =
+		utilization !== undefined
+			? Math.min(100, Math.max(0, utilization * 100))
+			: 100;
+
+	const budgetReset = integer(
+		headers.get(`${ANTHROPIC_UNIFIED_PREFIX}slow-budget-reset`),
+	);
+	const weeklyReset = integer(
+		headers.get(`${ANTHROPIC_UNIFIED_PREFIX}7d-reset`),
+	);
+	const resetsAt = budgetReset ?? weeklyReset;
+
+	return {
+		usedPercent,
+		resetsAt,
+		windowMinutes: 10_080,
+		label: "low",
+		status,
+		offer,
+		retryAfter,
+		maxWait,
+	};
+}
+
 function parseAnthropicUnifiedHeaders(
 	headers: Map<string, string>,
 ): RateLimitUpdate | undefined {
 	const primary = parseAnthropicWindow(headers, "5h", 300);
 	const secondary = parseAnthropicWindow(headers, "7d", 10_080);
+	const lowPriority = parseAnthropicLowPriority(headers);
 	const status = trimmed(headers.get(`${ANTHROPIC_UNIFIED_PREFIX}status`));
-	if (!primary && !secondary && !status) return undefined;
+	if (!primary && !secondary && !lowPriority && !status) return undefined;
 
 	const claim = trimmed(
 		headers.get(`${ANTHROPIC_UNIFIED_PREFIX}representative-claim`),
@@ -200,7 +259,13 @@ function parseAnthropicUnifiedHeaders(
 	return {
 		source: "response_headers",
 		snapshots: [
-			{ limitId: "anthropic", limitName: "Anthropic", primary, secondary },
+			{
+				limitId: "anthropic",
+				limitName: "Anthropic",
+				primary,
+				secondary,
+				lowPriority,
+			},
 		],
 		activeLimitId: "anthropic",
 		rateLimitReachedType: reached,

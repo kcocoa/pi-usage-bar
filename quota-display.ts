@@ -78,6 +78,8 @@ function debugUpdateText(update: RateLimitUpdate): string {
 					parts.push(debugWindowText(snapshot.primary, "primary"));
 				if (snapshot.secondary)
 					parts.push(debugWindowText(snapshot.secondary, "secondary"));
+				if (snapshot.lowPriority)
+					parts.push(debugWindowText(snapshot.lowPriority, "low"));
 				if (snapshot.credits)
 					parts.push(
 						`credits:${snapshot.credits.balance ?? (snapshot.credits.hasCredits ? "yes" : "no")}`,
@@ -106,6 +108,7 @@ function mergeSnapshot(
 		limitName: next.limitName ?? previous?.limitName,
 		primary: next.primary ?? previous?.primary,
 		secondary: next.secondary ?? previous?.secondary,
+		lowPriority: next.lowPriority ?? previous?.lowPriority,
 		credits: next.credits ?? previous?.credits,
 		planType: next.planType ?? previous?.planType,
 	};
@@ -211,7 +214,9 @@ export function registerQuotaDisplaySupport(
 
 	const selectSnapshot = (): RateLimitSnapshot | undefined => {
 		const hasWindows = (snapshot: RateLimitSnapshot | undefined): boolean =>
-			snapshot?.primary !== undefined || snapshot?.secondary !== undefined;
+			snapshot?.primary !== undefined ||
+			snapshot?.secondary !== undefined ||
+			snapshot?.lowPriority !== undefined;
 		const active = activeLimitId ? snapshots.get(activeLimitId) : undefined;
 		if (hasWindows(active)) return active;
 		const defaultSnapshot = snapshots.get("codex") ?? snapshots.get("anthropic") ?? snapshots.get("xai");
@@ -240,6 +245,7 @@ export function registerQuotaDisplaySupport(
 		for (const [fallback, window] of [
 			["primary", snapshot?.primary],
 			["secondary", snapshot?.secondary],
+			["low", snapshot?.lowPriority],
 		] as const) {
 			if (!window) continue;
 			const label = formatWindowLabel(window, fallback);
@@ -311,14 +317,16 @@ export function registerQuotaDisplaySupport(
 	function formatWindowDetails(
 		name: string,
 		window: RateLimitWindow | undefined,
+		statusSuffix?: string,
 	): string | undefined {
 		if (!window) return undefined;
 		const label = formatWindowLabel(window, name);
+		const suffix = statusSuffix ? ` ${statusSuffix}` : "";
 		if (isStale(window))
-			return `  ${name} (${label}): unknown, reset at ${formatReset(window.resetsAt)} has passed`;
+			return `  ${name} (${label}): unknown, reset at ${formatReset(window.resetsAt)} has passed${suffix}`;
 		return (
 			`  ${name} (${label}): ${formatPercent(window.usedPercent)}% used, ` +
-			`${formatPercent(remainingPercent(window))}% left, resets ${formatReset(window.resetsAt)}`
+			`${formatPercent(remainingPercent(window))}% left, resets ${formatReset(window.resetsAt)}${suffix}`
 		);
 	}
 
@@ -343,8 +351,19 @@ export function registerQuotaDisplaySupport(
 			lines.push(`${snapshot.limitId}${name}${active}`);
 			const primary = formatWindowDetails("Primary", snapshot.primary);
 			const secondary = formatWindowDetails("Secondary", snapshot.secondary);
+			const lpNotes: string[] = [];
+			if (snapshot.lowPriority?.status)
+				lpNotes.push(`status: ${snapshot.lowPriority.status}`);
+			if (snapshot.lowPriority?.offer)
+				lpNotes.push(`offer: ${snapshot.lowPriority.offer}`);
+			const lowPriority = formatWindowDetails(
+				"Low priority",
+				snapshot.lowPriority,
+				lpNotes.length ? `[${lpNotes.join(", ")}]` : undefined,
+			);
 			if (primary) lines.push(primary);
 			if (secondary) lines.push(secondary);
+			if (lowPriority) lines.push(lowPriority);
 			if (snapshot.credits) {
 				const creditParts = [
 					`available=${snapshot.credits.hasCredits ? "yes" : "no"}`,
