@@ -82,12 +82,14 @@ describe("Universal quota and usage display", () => {
 				now,
 			),
 		).toBe("3h44m");
-		// A zero unit must not be skipped to show seconds ("2h1s").
+		// No seconds, and zero units are dropped rather than skipped over.
 		expect(
 			formatResetCountdown((now + (2 * 3_600 + 1) * 1000) / 1000, now),
 		).toBe("2h");
-		expect(formatResetCountdown((now + 90 * 1000) / 1000, now)).toBe("1m");
-		expect(formatResetCountdown((now + 30 * 1000) / 1000, now)).toBe("30s");
+		expect(
+			formatResetCountdown((now + (5 * 86_400 + 20 * 60) * 1000) / 1000, now),
+		).toBe("5d");
+		expect(formatResetCountdown((now + 30 * 1000) / 1000, now)).toBe("now");
 	});
 
 	it("formats reset clock times as 24-hour HH:MM in requested timezone", () => {

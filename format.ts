@@ -76,7 +76,8 @@ export function formatSubscriptionType(
 }
 
 /**
- * Format relative countdown with at most two units, e.g. "3h44m", "5d17h", "now".
+ * Relative countdown for resets at least an hour away: "5d17h", "3h44m".
+ * Under an hour the status bar shows a clock time instead (formatWindowReset).
  */
 export function formatResetCountdown(
 	resetsAt: number | undefined,
@@ -84,28 +85,14 @@ export function formatResetCountdown(
 ): string | undefined {
 	if (resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt <= 0)
 		return undefined;
-	let remaining = Math.ceil(resetsAt - nowMs / 1000);
-	if (remaining <= 0) return "now";
-	// Two adjacent units, e.g. 2h0m1s -> "2h" (never skip a zero unit to reach
-	// a smaller one, and show seconds only when under a minute).
-	const units = [
-		["d", 86_400],
-		["h", 3_600],
-		["m", 60],
-		["s", 1],
-	] as const;
-	const values = units.map(([, seconds]) => {
-		const value = Math.floor(remaining / seconds);
-		remaining %= seconds;
-		return value;
-	});
-	const first = values.findIndex((value) => value > 0);
-	let text = `${values[first]}${units[first][0]}`;
-	const next = first + 1;
-	if (next < units.length - 1 && values[next] > 0) {
-		text += `${values[next]}${units[next][0]}`;
-	}
-	return text;
+	const minutes = Math.floor((resetsAt - nowMs / 1000) / 60);
+	if (minutes < 1) return "now";
+	const d = Math.floor(minutes / 1_440);
+	const h = Math.floor((minutes % 1_440) / 60);
+	const m = minutes % 60;
+	if (d > 0) return h > 0 ? `${d}d${h}h` : `${d}d`;
+	if (h > 0) return m > 0 ? `${h}h${m}m` : `${h}h`;
+	return `${m}m`;
 }
 
 /**
