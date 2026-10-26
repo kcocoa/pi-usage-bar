@@ -3,10 +3,8 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import {
-	formatLocalDateTime,
 	formatLocalStamp,
 	formatPercent,
-	formatReset,
 	formatResetClock,
 	formatResetCountdown,
 	formatSubscriptionType,
@@ -18,7 +16,6 @@ import {
 	severityColor,
 } from "./format.ts";
 import {
-	isAnthropic,
 	isCodexGpt,
 	isSupportedQuotaContext,
 	isXai,
@@ -36,10 +33,8 @@ const IDLE_REFRESH_MS = 60_000;
 export const DEFAULT_STATUS_KEY = "plan-usage-limit";
 
 export {
-	formatLocalDateTime,
 	formatLocalStamp,
 	formatPercent,
-	formatReset,
 	formatResetClock,
 	formatResetCountdown,
 	formatSubscriptionType,
@@ -155,9 +150,6 @@ export function registerQuotaDisplaySupport(
 	let activeContext: ExtensionContext | undefined;
 	let activeLimitId: string | undefined;
 	let planType: string | undefined;
-	let promoMessage: string | undefined;
-	let rateLimitReachedType: string | undefined;
-	let lastUpdatedAt: number | undefined;
 	let billingGeneration = 0;
 	let billingAttemptAt = 0;
 	let billingOk = false;
@@ -172,19 +164,15 @@ export function registerQuotaDisplaySupport(
 		snapshots.clear();
 		activeLimitId = undefined;
 		planType = undefined;
-		promoMessage = undefined;
-		rateLimitReachedType = undefined;
-		lastUpdatedAt = undefined;
 	};
 
 	const refreshXaiBilling = (
 		ctx: ExtensionContext,
-		force: boolean,
 	): Promise<void> | undefined => {
 		if (!isXai(ctx)) return undefined;
 		const now = Date.now();
 		const ttl = billingOk ? XAI_BILLING_TTL_MS : XAI_BILLING_RETRY_MS;
-		if (!force && now - billingAttemptAt < ttl) return billingInflight;
+		if (now - billingAttemptAt < ttl) return billingInflight;
 		if (billingInflight) return billingInflight;
 		const started = billingGeneration;
 		billingAttemptAt = now;
@@ -294,160 +282,10 @@ export function registerQuotaDisplaySupport(
 			planType = nextPlanType;
 			changed = true;
 		}
-		if (
-			update.promoMessage !== undefined &&
-			update.promoMessage !== promoMessage
-		) {
-			promoMessage = update.promoMessage;
-			changed = true;
-		}
-		if (update.rateLimitReachedType !== undefined) {
-			const next = update.rateLimitReachedType ?? undefined;
-			if (next !== rateLimitReachedType) {
-				rateLimitReachedType = next;
-				changed = true;
-			}
-		}
 		if (!changed) return false;
-		lastUpdatedAt = Date.now();
 		renderStatus(ctx);
 		return true;
 	};
-
-	function formatWindowDetails(
-		name: string,
-		window: RateLimitWindow | undefined,
-		statusSuffix?: string,
-	): string | undefined {
-		if (!window) return undefined;
-		const label = formatWindowLabel(window, name);
-		const suffix = statusSuffix ? ` ${statusSuffix}` : "";
-		if (isStale(window))
-			return `  ${name} (${label}): unknown, reset at ${formatReset(window.resetsAt)} has passed${suffix}`;
-		return (
-			`  ${name} (${label}): ${formatPercent(window.usedPercent)}% used, ` +
-			`${formatPercent(remainingPercent(window))}% left, resets ${formatReset(window.resetsAt)}${suffix}`
-		);
-	}
-
-	const formatDetails = (providerName: string): string => {
-		if (snapshots.size === 0 && !promoMessage && !rateLimitReachedType) {
-			if (providerName === "xAI") {
-				return "No xAI usage limit data yet. Weekly SuperGrok usage limit needs a subscription login (/login xai).";
-			}
-			return `No ${providerName} usage limit data has been observed in response headers or SSE body events yet.`;
-		}
-
-		const lines = [
-			`${providerName} usage limit${lastUpdatedAt ? ` (updated ${formatLocalDateTime(lastUpdatedAt)})` : ""}`,
-		];
-		const subscription = formatSubscriptionType(planType);
-		if (subscription) lines.push(`Plan: ${subscription}`);
-		for (const snapshot of [...snapshots.values()].sort((a, b) =>
-			a.limitId.localeCompare(b.limitId),
-		)) {
-			const active = snapshot.limitId === activeLimitId ? " [active]" : "";
-			const name = snapshot.limitName ? ` — ${snapshot.limitName}` : "";
-			lines.push(`${snapshot.limitId}${name}${active}`);
-			const primary = formatWindowDetails("Primary", snapshot.primary);
-			const secondary = formatWindowDetails("Secondary", snapshot.secondary);
-			const lpNotes: string[] = [];
-			if (snapshot.lowPriority?.status)
-				lpNotes.push(`status: ${snapshot.lowPriority.status}`);
-			if (snapshot.lowPriority?.offer)
-				lpNotes.push(`offer: ${snapshot.lowPriority.offer}`);
-			const lowPriority = formatWindowDetails(
-				"Low priority",
-				snapshot.lowPriority,
-				lpNotes.length ? `[${lpNotes.join(", ")}]` : undefined,
-			);
-			if (primary) lines.push(primary);
-			if (secondary) lines.push(secondary);
-			if (lowPriority) lines.push(lowPriority);
-			if (snapshot.credits) {
-				const creditParts = [
-					`available=${snapshot.credits.hasCredits ? "yes" : "no"}`,
-					`unlimited=${snapshot.credits.unlimited ? "yes" : "no"}`,
-				];
-				if (snapshot.credits.balance)
-					creditParts.push(`balance=${snapshot.credits.balance}`);
-				lines.push(`  Credits: ${creditParts.join(", ")}`);
-			}
-		}
-		if (rateLimitReachedType)
-			lines.push(`Reached type: ${rateLimitReachedType}`);
-		if (promoMessage) lines.push(`Message: ${promoMessage}`);
-		return lines.join("\n");
-	};
-
-	// Universal /usage-limit command
-	pi.registerCommand("usage-limit", {
-		description: "Show model usage limits (Anthropic, xAI, Codex)",
-		handler: async (args, ctx) => {
-			const target = args?.trim().toLowerCase();
-			if (target === "xai" || (!target && isXai(ctx))) {
-				await refreshXaiBilling(ctx, true);
-				ctx.ui.notify(
-					formatDetails("xAI"),
-					snapshots.size > 0 ? "info" : "warning",
-				);
-				return;
-			}
-			if (target === "anthropic" || (!target && isAnthropic(ctx))) {
-				ctx.ui.notify(
-					formatDetails("Anthropic"),
-					snapshots.size > 0 ? "info" : "warning",
-				);
-				return;
-			}
-			if (target === "codex" || (!target && isCodexGpt(ctx))) {
-				ctx.ui.notify(
-					formatDetails("Codex"),
-					snapshots.size > 0 ? "info" : "warning",
-				);
-				return;
-			}
-
-			// Fallback: report whatever snapshots we have or the current provider
-			const label = ctx.model?.provider ? String(ctx.model.provider) : "Current provider";
-			ctx.ui.notify(
-				formatDetails(label),
-				snapshots.size > 0 ? "info" : "warning",
-			);
-		},
-	});
-
-	// Legacy aliases
-	pi.registerCommand("codex:usage", {
-		description: "Show the latest Codex usage limit snapshot",
-		handler: async (_args, ctx) => {
-			ctx.ui.notify(
-				formatDetails("Codex"),
-				snapshots.size > 0 ? "info" : "warning",
-			);
-		},
-	});
-
-	pi.registerCommand("anthropic:usage", {
-		description: "Show the latest Anthropic usage limit snapshot",
-		handler: async (_args, ctx) => {
-			ctx.ui.notify(
-				formatDetails("Anthropic"),
-				snapshots.size > 0 ? "info" : "warning",
-			);
-		},
-	});
-
-	pi.registerCommand("xai:usage", {
-		description: "Show the latest xAI usage limit snapshot",
-		handler: async (_args, ctx) => {
-			if (isXai(ctx)) await refreshXaiBilling(ctx, true);
-			ctx.ui.notify(
-				formatDetails("xAI"),
-				snapshots.size > 0 ? "info" : "warning",
-			);
-		},
-	});
 
 	const stopIdleTimer = (): void => {
 		if (idleTimer) clearInterval(idleTimer);
@@ -468,7 +306,7 @@ export function registerQuotaDisplaySupport(
 		startIdleTimer();
 		activeContext = isSupportedQuotaContext(ctx) ? ctx : undefined;
 		setStatus(ctx, undefined);
-		return refreshXaiBilling(ctx, false);
+		return refreshXaiBilling(ctx);
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
 		stopIdleTimer();
@@ -479,13 +317,13 @@ export function registerQuotaDisplaySupport(
 	pi.on("turn_start", (_event, ctx) => {
 		activeContext = isSupportedQuotaContext(ctx) ? ctx : undefined;
 		renderStatus(ctx);
-		return refreshXaiBilling(ctx, false);
+		return refreshXaiBilling(ctx);
 	});
 	pi.on("model_select", (_event, ctx) => {
 		clearState();
 		activeContext = isSupportedQuotaContext(ctx) ? ctx : undefined;
 		setStatus(ctx, undefined);
-		return refreshXaiBilling(ctx, false);
+		return refreshXaiBilling(ctx);
 	});
 
 	const handleResponseHeaders = (

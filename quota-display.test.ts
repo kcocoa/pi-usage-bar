@@ -6,8 +6,6 @@ mock.module("@earendil-works/pi-coding-agent", () => ({
 }));
 
 const {
-	formatLocalDateTime,
-	formatReset,
 	formatResetClock,
 	formatResetCountdown,
 	formatSubscriptionType,
@@ -20,18 +18,13 @@ type Handler = (event: unknown, ctx: unknown) => unknown;
 
 function createHarness() {
 	const handlers = new Map<string, Handler[]>();
-	const commands = new Map<string, { handler: Handler }>();
 	const pi = {
 		on(name: string, handler: Handler) {
 			handlers.set(name, [...(handlers.get(name) ?? []), handler]);
 		},
-		registerCommand(name: string, command: { handler: Handler }) {
-			commands.set(name, command);
-		},
 	} as unknown as Parameters<typeof registerQuotaDisplaySupport>[0];
 	return {
 		pi,
-		commands,
 		async emit(name: string, event: unknown, ctx: unknown) {
 			for (const handler of handlers.get(name) ?? []) await handler(event, ctx);
 		},
@@ -95,20 +88,6 @@ describe("Universal quota and usage display", () => {
 		).toBe("2h");
 		expect(formatResetCountdown((now + 90 * 1000) / 1000, now)).toBe("1m");
 		expect(formatResetCountdown((now + 30 * 1000) / 1000, now)).toBe("30s");
-	});
-
-	it("formats reset times in the requested timezone with its offset", () => {
-		const epoch = 1791388800; // 2026-10-07T16:00:00Z
-		expect(formatReset(epoch, "UTC")).toBe("2026-10-07 16:00 (UTC+00:00)");
-		expect(formatReset(epoch, "Asia/Shanghai")).toBe(
-			"2026-10-08 00:00 (UTC+08:00)",
-		);
-	});
-
-	it("defaults reset times to the local timezone", () => {
-		const epoch = 1791388800;
-		const formatted = formatReset(epoch);
-		expect(formatted).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$/);
 	});
 
 	it("formats reset clock times as 24-hour HH:MM in requested timezone", () => {
@@ -508,45 +487,11 @@ describe("Universal quota and usage display", () => {
 		);
 		const official = createContext("openai-codex");
 		await harness.emit("model_select", { type: "model_select" }, official.ctx);
-		await harness.commands.get("codex:usage")?.handler("", official.ctx);
 
-		expect(official.notify.mock.calls.at(-1)?.[0]).toContain(
-			"No Codex usage limit data",
-		);
-	});
-
-	it("registers a detailed usage command and unified /usage-limit command", async () => {
-		const harness = createHarness();
-		registerQuotaDisplaySupport(harness.pi);
-		const { ctx, notify } = createContext();
-		await harness.emit(
-			"after_provider_response",
-			{
-				type: "after_provider_response",
-				status: 200,
-				headers: {
-					"x-codex-primary-used-percent": "20",
-					"x-codex-primary-window-minutes": "300",
-					"x-codex-credits-has-credits": "true",
-					"x-codex-credits-unlimited": "false",
-					"x-codex-credits-balance": "7.50",
-				},
-			},
-			ctx,
-		);
-
-		// Test unified /quota
-		await harness.commands.get("usage-limit")?.handler("", ctx);
-		expect(notify.mock.calls.at(-1)?.[0]).toContain(
-			"Primary (5h): 20% used, 80% left",
-		);
-
-		// Test legacy /codex:usage
-		await harness.commands.get("codex:usage")?.handler("", ctx);
-		expect(notify.mock.calls.at(-1)?.[0]).toContain(
-			"Primary (5h): 20% used, 80% left",
-		);
-		expect(notify.mock.calls.at(-1)?.[0]).toContain("balance=7.50");
+		expect(official.setStatus.mock.calls.at(-1)).toEqual([
+			DEFAULT_STATUS_KEY,
+			undefined,
+		]);
 	});
 
 	it("renders 5h and 7d remaining quota for Anthropic provider responses", async () => {
@@ -580,7 +525,7 @@ describe("Universal quota and usage display", () => {
 	it("shows a window as unknown once its reset time has passed", async () => {
 		const harness = createHarness();
 		registerQuotaDisplaySupport(harness.pi);
-		const { ctx, setStatus, notify } = createContext("anthropic");
+		const { ctx, setStatus } = createContext("anthropic");
 		const nowSec = Math.floor(Date.now() / 1000);
 		await harness.emit(
 			"after_provider_response",
@@ -600,65 +545,6 @@ describe("Universal quota and usage display", () => {
 		const footer = setStatus.mock.calls.at(-1)?.[1];
 		expect(footer).toContain("5h:?↺now");
 		expect(footer).toContain("7d:77%");
-		await harness.commands.get("anthropic:usage")?.handler("", ctx);
-		expect(notify.mock.calls.at(-1)?.[0]).toContain(
-			"Primary (5h): unknown, reset at",
-		);
-	});
-
-	it("clears an Anthropic rejection once the status is allowed again", async () => {
-		const harness = createHarness();
-		registerQuotaDisplaySupport(harness.pi);
-		const { ctx, notify } = createContext("anthropic");
-		const respond = (status: string) =>
-			harness.emit(
-				"after_provider_response",
-				{
-					type: "after_provider_response",
-					status: 200,
-					headers: {
-						"anthropic-ratelimit-unified-5h-utilization": "1",
-						"anthropic-ratelimit-unified-status": status,
-						"anthropic-ratelimit-unified-representative-claim": "five_hour",
-					},
-				},
-				ctx,
-			);
-		const usage = async () => {
-			await harness.commands.get("anthropic:usage")?.handler("", ctx);
-			return notify.mock.calls.at(-1)?.[0];
-		};
-
-		await respond("rejected");
-		expect(await usage()).toContain("Reached type: rejected (five_hour)");
-		await respond("allowed");
-		expect(await usage()).not.toContain("Reached type");
-	});
-
-	it("registers an anthropic:usage command", async () => {
-		const harness = createHarness();
-		registerQuotaDisplaySupport(harness.pi);
-		const { ctx, notify } = createContext("anthropic");
-		await harness.emit(
-			"after_provider_response",
-			{
-				type: "after_provider_response",
-				status: 200,
-				headers: {
-					"anthropic-ratelimit-unified-5h-utilization": "0.20",
-					"anthropic-ratelimit-unified-5h-reset": String(
-						Math.floor(Date.now() / 1000) + 18000,
-					),
-				},
-			},
-			ctx,
-		);
-		await harness.commands.get("anthropic:usage")?.handler("", ctx);
-
-		expect(notify.mock.calls.at(-1)?.[0]).toContain("Anthropic usage limit");
-		expect(notify.mock.calls.at(-1)?.[0]).toContain(
-			"Primary (5h): 20% used, 80% left",
-		);
 	});
 
 	it("shows weekly SuperGrok quota from the billing endpoint", async () => {
@@ -685,7 +571,7 @@ describe("Universal quota and usage display", () => {
 				fetchBilling,
 			},
 		});
-		const { ctx, setStatus, notify } = createContext("xai");
+		const { ctx, setStatus } = createContext("xai");
 		await harness.emit("session_start", { type: "session_start" }, ctx);
 
 		expect(fetchBilling).toHaveBeenCalledTimes(1);
@@ -693,18 +579,12 @@ describe("Universal quota and usage display", () => {
 			DEFAULT_STATUS_KEY,
 			"supergrok 7d:99%",
 		]);
-
-		await harness.commands.get("xai:usage")?.handler("", ctx);
-		expect(notify.mock.calls.at(-1)?.[0]).toContain("xAI usage limit");
-		expect(notify.mock.calls.at(-1)?.[0]).toContain("Plan: supergrok");
-		expect(notify.mock.calls.at(-1)?.[0]).toContain("Primary (7d): 1% used, 99% left");
-		expect(notify.mock.calls.at(-1)?.[0]).toContain("balance=14.46");
 	});
 
-	it("renders low-priority allowance in footer and details when Anthropic headers are observed", async () => {
+	it("renders low-priority allowance in footer when Anthropic headers are observed", async () => {
 		const harness = createHarness();
 		registerQuotaDisplaySupport(harness.pi);
-		const { ctx, setStatus, notify } = createContext("anthropic");
+		const { ctx, setStatus } = createContext("anthropic");
 		const nowSec = Math.floor(Date.now() / 1000);
 		await harness.emit(
 			"after_provider_response",
@@ -730,15 +610,5 @@ describe("Universal quota and usage display", () => {
 		expect(footer).toContain("5h:80%");
 		expect(footer).toContain("7d:60%");
 		expect(footer).toContain("low:85%");
-
-		await harness.commands.get("anthropic:usage")?.handler("", ctx);
-		const details = notify.mock.calls.at(-1)?.[0];
-		expect(details).toContain("Anthropic usage limit");
-		expect(details).toContain("Primary (5h): 20% used, 80% left");
-		expect(details).toContain("Secondary (7d): 40% used, 60% left");
-		expect(details).toContain(
-			"Low priority (low): 15% used, 85% left",
-		);
-		expect(details).toContain("[status: active, offer: treatment]");
 	});
 });

@@ -17,9 +17,6 @@ Displays remaining usage limit percentages, local reset countdowns (or absolute 
 - **Zero Invasiveness**:
   - Observes HTTP response headers via Pi's native `after_provider_response` hook.
   - Does not modify provider requests, wrap transports, or alter message lifecycles.
-- **Commands**:
-  - `/usage-limit`: Shows detailed usage limit information for the active model provider, or specify one (e.g. `/usage-limit anthropic`, `/usage-limit xai`, `/usage-limit codex`).
-  - Backward-compatible aliases: `/anthropic:usage`, `/xai:usage`, `/codex:usage`.
 
 ## Status Bar Display Examples
 

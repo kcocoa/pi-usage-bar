@@ -188,33 +188,3 @@ export function formatLocalStamp(
 		: `${part("hour")}:${part("minute")}`;
 	return `${part("year")}-${part("month")}-${part("day")} ${time}`;
 }
-
-/** Offset in effect at `date`, e.g. `UTC+08:00`. DST-aware. */
-function localOffsetLabel(date: Date, timeZone: string): string {
-	const name = new Intl.DateTimeFormat("en-US", {
-		timeZone,
-		timeZoneName: "longOffset",
-	})
-		.formatToParts(date)
-		.find((part) => part.type === "timeZoneName")?.value;
-	if (!name || name === "GMT") return "UTC+00:00";
-	return name.replace(/^GMT/, "UTC");
-}
-
-/** Absolute time in the local timezone, e.g. `2026-10-08 00:00 (UTC+08:00)`. */
-export function formatLocalDateTime(
-	ms: number,
-	timeZone = LOCAL_TIME_ZONE,
-): string {
-	const date = new Date(ms);
-	if (!Number.isFinite(date.getTime())) return "unknown";
-	return `${formatLocalStamp(date, timeZone)} (${localOffsetLabel(date, timeZone)})`;
-}
-
-export function formatReset(
-	resetsAt: number | undefined,
-	timeZone = LOCAL_TIME_ZONE,
-): string {
-	if (resetsAt === undefined) return "unknown";
-	return formatLocalDateTime(resetsAt * 1000, timeZone);
-}
